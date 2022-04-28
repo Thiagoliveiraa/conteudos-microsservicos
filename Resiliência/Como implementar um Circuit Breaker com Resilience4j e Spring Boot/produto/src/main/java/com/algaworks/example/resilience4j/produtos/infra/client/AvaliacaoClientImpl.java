@@ -2,12 +2,16 @@ package com.algaworks.example.resilience4j.produtos.infra.client;
 
 import com.algaworks.example.resilience4j.produtos.client.avaliacoes.AvaliacaoClient;
 import com.algaworks.example.resilience4j.produtos.client.avaliacoes.AvaliacaoModel;
+
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -25,11 +29,14 @@ public class AvaliacaoClientImpl implements AvaliacaoClient {
 			.encode()
 			.toUriString();
 	
+	private final Map<Long, List<AvaliacaoModel>> CACHE = new HashMap<>();
+	
 	public AvaliacaoClientImpl(RestTemplate restTemplate) {
 		this.restTemplate = restTemplate;
 	}
 
 	@Override
+	@CircuitBreaker(name = "avaliacaoCB",fallbackMethod = "buscarTodosPorProdutoNoCache")
 	public List<AvaliacaoModel> buscarTodosPorProduto(Long produtoId) {
 		final List<AvaliacaoModel> avaliacoes = executarRequisicao(produtoId);
 		return avaliacoes;
@@ -49,7 +56,15 @@ public class AvaliacaoClientImpl implements AvaliacaoClient {
 			throw e;
 		}
 
+		logger.info("Alimentando Cache");
+		CACHE.put(produtoId, Arrays.asList(avaliacoes));
+		
 		return Arrays.asList(avaliacoes);
+	}
+	
+	private List<AvaliacaoModel> buscarTodosPorProdutoNoCache(Long produtoId, Throwable e) {
+		logger.info("Buscando no cache");
+		return CACHE.getOrDefault(produtoId, new ArrayList<>());
 	}
 	
 }
